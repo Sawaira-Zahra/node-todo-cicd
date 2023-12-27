@@ -21,7 +21,7 @@ pipeline {
 
         stage('Test') {
             steps {
-                sh 'ls -l index.html'
+                sh 'ls'
             }
         }
 
