@@ -1,40 +1,93 @@
 pipeline {
     agent any
-    
+
     stages {
-        
-        stage("code"){
-            steps{
-                git url: "https://github.com/LondheShubham153/node-todo-cicd.git", branch: "master"
-                echo 'bhaiyya code clone ho gaya'
-            }
+      stage('Build') {
+        steps {
+          script {
+            dockerImage = docker.build("sawaira/distance-converter:${env.BUILD_ID}")
         }
-        stage("build and test"){
-            steps{
-                sh "docker build -t node-app-test-new ."
-                echo 'code build bhi ho gaya'
-            }
-        }
-        stage("scan image"){
-            steps{
-                echo 'image scanning ho gayi'
-            }
-        }
-        stage("push"){
-            steps{
-                withCredentials([usernamePassword(credentialsId:"dockerHub",passwordVariable:"dockerHubPass",usernameVariable:"dockerHubUser")]){
-                sh "docker login -u ${env.dockerHubUser} -p ${env.dockerHubPass}"
-                sh "docker tag node-app-test-new:latest ${env.dockerHubUser}/node-app-test-new:latest"
-                sh "docker push ${env.dockerHubUser}/node-app-test-new:latest"
-                echo 'image push ho gaya'
+    }
+}
+        stage('Push') {
+            steps {
+                script {
+                    docker.withRegistry('https://registry.hub.docker.com', 'jenkins-project') {
+                        dockerImage.push()
+                    }
                 }
             }
         }
-        stage("deploy"){
-            steps{
-                sh "docker-compose down && docker-compose up -d"
-                echo 'deployment ho gayi'
+
+        stage('Test') {
+            steps {
+                sh 'ls -l index.html'
             }
+        }
+
+        stage('Deploy') {
+            steps {
+                script {
+                   
+                    sshPublisher(
+                        publishers: [
+                            sshPublisherDesc(
+                                configName: "Ubuntu-Server", 
+                                transfers: [sshTransfer(
+                                    execCommand: """
+                                        docker pull sawaira/distance-converter:${env.BUILD_ID}
+                                        docker stop distance-converter-container || true
+                                        docker rm distance-converter-container || true
+                                        docker run -d --name distance-converter-container -p 80:80 sawaira/distance-converter:${env.BUILD_ID}
+                                    """
+                                )]
+                            )
+                        ]
+                    )
+
+                  
+                    boolean isDeploymentSuccessful = sh(script: 'curl -s -o /dev/null -w "%{http_code}" http://16.16.183.35:80', returnStdout: true).trim() == '200'
+
+                    if (!isDeploymentSuccessful) {
+                       
+                        def previousSuccessfulTag = readFile('previous_successful_tag.txt').trim()
+                        sshPublisher(
+                            publishers: [
+                                sshPublisherDesc(
+                                    configName: "Ubuntu-Server",
+                                    transfers: [sshTransfer(
+                                        execCommand: """
+                                            docker pull sawaira/distance-converter:${previousSuccessfulTag}
+                                            docker stop distance-converter-container || true
+                                            docker rm distance-converter-container || true
+                                            docker run -d --name distance-converter-container -p 80:80 sawaira/distance-converter:${previousSuccessfulTag}
+                                        """
+                                    )]
+                                )
+                            ]
+                        )
+                    } else {
+                       
+                        writeFile file: 'previous_successful_tag.txt', text: "${env.BUILD_ID}"
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+        failure {
+            mail(
+                to: 'sawairakazmi43@gmail.com',
+                subject: "Failed Pipeline: ${env.JOB_NAME} [${env.BUILD_NUMBER}]",
+                body: """Something is wrong with the build ${env.BUILD_URL}
+                Rolling back to the previous version
+
+                Regards,
+                Jenkins
+                
+                """
+            )
         }
     }
 }
