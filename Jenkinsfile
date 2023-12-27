@@ -12,7 +12,7 @@ pipeline {
         stage('Push') {
             steps {
                 script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'jenkins-project') {
+                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub') {
                         dockerImage.push()
                     }
                 }
