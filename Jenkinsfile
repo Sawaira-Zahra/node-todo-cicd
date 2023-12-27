@@ -12,7 +12,7 @@ pipeline {
         stage('Push') {
             steps {
                 script {
-                    docker.withRegistry('https://registry.hub.docker.com', 'dockerhub') {
+                    docker.withRegistry('https://registry.hub.docker.com', 'docker-cred') {
                         dockerImage.push()
                     }
                 }
@@ -32,7 +32,7 @@ pipeline {
                     sshPublisher(
                         publishers: [
                             sshPublisherDesc(
-                                configName: "Ubuntu-Server", 
+                                configName: "jenkins-master", 
                                 transfers: [sshTransfer(
                                     execCommand: """
                                         docker pull sawaira/distance-converter:${env.BUILD_ID}
@@ -46,7 +46,7 @@ pipeline {
                     )
 
                   
-                    boolean isDeploymentSuccessful = sh(script: 'curl -s -o /dev/null -w "%{http_code}" http://16.16.183.35:80', returnStdout: true).trim() == '200'
+                    boolean isDeploymentSuccessful = sh(script: 'curl -s -o /dev/null -w "%{http_code}" http://16.16.202.82:80', returnStdout: true).trim() == '200'
 
                     if (!isDeploymentSuccessful) {
                        
@@ -54,7 +54,7 @@ pipeline {
                         sshPublisher(
                             publishers: [
                                 sshPublisherDesc(
-                                    configName: "Ubuntu-Server",
+                                    configName: "jenkins-master",
                                     transfers: [sshTransfer(
                                         execCommand: """
                                             docker pull sawaira/distance-converter:${previousSuccessfulTag}
